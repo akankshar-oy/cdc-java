@@ -7,21 +7,29 @@ The application writes orders to MongoDB only. A background listener subscribes 
 ## Architecture
 
 ```
-                    ┌─────────────── Spring Boot application ──────────────┐
-                    │                                                      │
- POST/PUT/DELETE/   │  OrderController ────────── read / write ────────────┼──▶ MongoDB
- GET /api/orders ──▶│                                                      │    (orders collection,
-                    │                                                      │     single-node replica set)
-                    │  ChangeStreamRunner ◀───────── change stream ────────┼────
-                    │           │                                          │
-                    │           ├────────── upsert / delete ───────────────┼──▶ Elasticsearch
-                    │           │                                          │    (orders index)
-                    │           └──── resume token + dedup keys ◀─────────▶┼──▶ Redis
-                    │                                                      │
- GET /api/search ──▶│  SearchController ─────────── query ─────────────────┼──▶ Elasticsearch
-                    │                                                      │
-                    └──────────────────────────────────────────────────────┘
+  POST/PUT/DELETE/GET /api/orders
+              │
+              ▼
+      OrderController ─────────▶ MongoDB
+                                    │  (orders collection, single-node replica set)
+                                    │
+                                    │  change stream
+                                    ▼
+                          ChangeStreamRunner ─────────▶ Redis
+                                    │                   (resume token, dedup keys)
+                                    │  upsert / delete
+                                    ▼
+                              Elasticsearch
+                                    │  (orders index)
+                                    │  query
+                                    ▼
+                           SearchController
+                                    │
+                                    ▼
+                          GET /api/search
 ```
+
+`OrderController`, `ChangeStreamRunner` and `SearchController` all run inside the same Spring Boot process.
 
 - **Write path** — `OrderController` reads and writes MongoDB through Spring Data MongoDB.
 - **Capture** — `ChangeStreamRunner` opens a change stream on the `orders` collection at startup, resuming from the token stored in Redis.
