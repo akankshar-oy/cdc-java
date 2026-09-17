@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: pipeline
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/cdcdb?replicaSet=rs0&directConnection=true}
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.cdc.pipeline: INFO
