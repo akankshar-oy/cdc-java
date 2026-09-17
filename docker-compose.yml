@@ -1,0 +1,79 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: cdcjava-mongo
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  mongo-init:
+    image: mongo:7
+    container_name: cdcjava-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    command: >
+      mongosh --host mongo:27017 --quiet --eval
+      "try { rs.status(); print('replica set already initiated'); } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }); print('replica set initiated'); }"
+    restart: "no"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: cdcjava-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: cdcjava-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cdcjava-app
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/cdcdb?replicaSet=rs0&directConnection=true
+      - ELASTICSEARCH_URIS=http://elasticsearch:9200
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+volumes:
+  mongo-data:
+  es-data:
