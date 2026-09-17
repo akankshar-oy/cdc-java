@@ -7,18 +7,20 @@ The application writes orders to MongoDB only. A background listener subscribes 
 ## Architecture
 
 ```
-                 write path (REST)                     read path (REST)
-   client  ───────────────────────────▶  MongoDB          client ────────▶  Elasticsearch
-              POST/GET/PUT/DELETE       (orders coll.)                      GET /api/search
-              /api/orders                    │
-                                             │  MongoDB Change Stream
-                                             ▼
-                                   ChangeStreamRunner (Spring Boot)
-                                             │
-                            ┌────────────────┴────────────────┐
-                            ▼                                  ▼
-                         Redis                            Elasticsearch
-               (dedup keys + resume token)         (upsert / delete "orders" index)
+                    ┌─────────────── Spring Boot application ──────────────┐
+                    │                                                      │
+ POST/PUT/DELETE/   │  OrderController ────────── read / write ────────────┼──▶ MongoDB
+ GET /api/orders ──▶│                                                      │    (orders collection,
+                    │                                                      │     single-node replica set)
+                    │  ChangeStreamRunner ◀───────── change stream ────────┼────
+                    │           │                                          │
+                    │           ├────────── upsert / delete ───────────────┼──▶ Elasticsearch
+                    │           │                                          │    (orders index)
+                    │           └──── resume token + dedup keys ◀─────────▶┼──▶ Redis
+                    │                                                      │
+ GET /api/search ──▶│  SearchController ─────────── query ─────────────────┼──▶ Elasticsearch
+                    │                                                      │
+                    └──────────────────────────────────────────────────────┘
 ```
 
 - **Write path** — `OrderController` reads and writes MongoDB through Spring Data MongoDB.
