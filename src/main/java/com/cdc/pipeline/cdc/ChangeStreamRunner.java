@@ -104,7 +104,7 @@ public class ChangeStreamRunner implements MessageListener<ChangeStreamDocument<
         // Marked only after the Elasticsearch write succeeds: a crash in between re-delivers the
         // event on resume instead of skipping it as "already seen", which is what makes this
         // at-least-once rather than at-most-once.
-        redisTemplate.opsForValue().set(dedupKey, "1", DEDUP_TTL);
+        redisTemplate.opsForValue().setIfAbsent(dedupKey, "1", DEDUP_TTL);
         redisTemplate.opsForValue().set(RESUME_TOKEN_KEY, resumeToken.toJson());
     }
 
